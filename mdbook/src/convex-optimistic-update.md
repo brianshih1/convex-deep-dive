@@ -36,3 +36,7 @@ Removing a mutation from the local queue is a two-phase commit from the client's
 - Phase 2: `Transition{endVersion.ts: 16` arrives - the mutation can be dropped since the latest query already contains the mutation.
 
 That's assuming that the `MutationResponse` was successful. 
+
+### Re-rendering
+
+Every time there's a `Transition` message, the view gets rebuilt - even if the transition has nothing to do with what the optimistic updates care about. This is because there's no dependency tracking between updates and queries. Note that the `Transition` always contains the entire query result instead of containing incremental updates.
