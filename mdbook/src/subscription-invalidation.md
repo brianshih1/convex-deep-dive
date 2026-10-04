@@ -33,7 +33,7 @@ Invalidation is judged on:
 - how many false positives the implementation generates
 - how much memory the implementation requires
 
-The invalidation function doesn’t need to be perfect. False positives are allowed; false negatives are not. The cost of a false positive output is an unnecessary query refresh. An invalidation function that always invalidates is technically “correct” from the user’s perspective. As a result, one of the measures of a good invalidation method is how infrequent false positives are.
+The invalidation function doesn’t need to be perfect. False positives are allowed; false negatives are not. The cost of a false positive output is an unnecessary query refresh. An invalidation function that always invalidates is technically “correct” from the user’s perspective. However, that will cause the system to excessively refresh, even when the commit will not alter the query output. Therefore, a good invalidation implementation minimizes the number of false positives.
 
 The second measure of a good invalidation method is memory footprint of the `recent_commits` and `previous_query_result`. The more compact representation, the better.
 
@@ -43,13 +43,13 @@ A naive approach would be to just track all the document IDs returned by the que
 
 However, that is not correct.
 
-Let’s look at a query: `points>12`.
+Let’s take this query as an example: `points>12`.
 
 Let’s say the query returned two documents: `{ name: alice, points: 20 }` and `{ name: bob, points: 30 }`, with tracking IDs  `[alice, bob]`.
 
-Let’s say someone added `{ name: carol, points: 40}` into the database. It doesn’t conflict with the document ID list. However, it would cause the query output to change.
+Let’s say someone added `{ name: carol, points: 40 }` into the database. It doesn’t conflict with the document ID list. However, it would cause the query output to change.
 
-This is because tracking document IDs does not keep the intent of the query, which is all documents greater than 40.
+This is because tracking document IDs does not respect the intent of the query, which is all documents greater than 40.
 
 ### Tracking Ranges
 
@@ -59,7 +59,7 @@ Even a plain `.query("players")` with no explicit index is a scan of the built-i
 
 A method like: `.order("desc").take(3)` doesn't start at 1000. It starts at `+∞` and walks downward through the index until it has three rows. So the range is something like `[150, +∞)`.
 
-A query like `q.eq("team", "red")` is `["red", succ(enc("red"))` where `succ` is the next lexicographical.
+A query like `q.eq("team", "red")` is `["red", succ(enc("red"))` where `succ` returns the next lexicographical key of its input.
 
 This is the constraint that makes the whole design work. It means that the set of documents a query *could* have observed is fully described by a set of `(index, range)` pairs. If we record those pairs while the query runs, we have a complete description of the query's reads that is independent of how many documents were returned.
 
