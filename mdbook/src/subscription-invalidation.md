@@ -1,20 +1,18 @@
-# How Subscription Invalidation works
+# Designing Query Cache Invalidation
 
 ### Problem
 
-The server needs a way to figure out if a subscription (live query) is invalidated by a recent change and needs to be refreshed.
+Cache invalidation is the mechanism to figure out when a cached query result needs to be refreshed due to a recent change.
 
-For example, let’s say there’s a live query that looks like this:
+For example, let’s say there’s a live Convex query that looks like this:
 
-```go
- .query("players")
-      .withIndex("by_points", (q) => q.gt("points", 20))
-      .collect();
+```
+points>20
 ```
 
-Then when someone inserts a new document whose `points:30` then the query should be invalidated. On the other hand, if there’s a new document whose `points:19` then the query doesn’t need to be invalidated.
+If a document with `points:30` is inserted, the cached query should be invalidated. On the other hand, it a document with `points:20` is inserted, then the query doesn't need to be invalidated.
 
-### What is invalidation?
+### More precide definition of invalidation
 
 First, let’s explain exactly what invalidation means in Convex’s system.
 
@@ -24,7 +22,17 @@ Each live subscription is known to be valid up to a specific `commit_ts`. Let’
 
 The process of detecting whether it’s safe to advance the `processed_ts` to a higher `commit_ts` is known as invalidation.
 
-Conceptually, it’s a simple function that takes the recent commits and the previous query result and returns a boolean: `is_valid(recent_commits, previous_query_result)`.
+### Building blocks of an invalidation algorithm
+
+Conceptually, the invalidation algorithm is this function:
+
+`is_valid(recent_commits, previous_query_result)`
+
+Therefore, you have to design:
+
+- data structure for recent commits
+- data structure for previous query result
+- how to check if a recent commit invalidates the previous query result
 
 ### What makes a good invalidation implementation?
 
@@ -63,9 +71,11 @@ A query like `q.eq("team", "red")` is `["red", succ(enc("red"))` where `succ` re
 
 This is the constraint that makes the whole design work. It means that the set of documents a query *could* have observed is fully described by a set of `(index, range)` pairs. If we record those pairs while the query runs, we have a complete description of the query's reads that is independent of how many documents were returned.
 
+**Representing previous query result**
+
 As a result, `previous_query_result` can be represented as `processed_ts` + a list of interval ranges representing indexes it touched.
 
-### Representing Commits
+**Representing commits**
 
 Now the other side. A commit is a set of document writes. For invalidation purposes, we don't care about the document contents, only about which index keys the write touched. Each write is converted into, per index, an `Update { old, new }` of index keys.
 
